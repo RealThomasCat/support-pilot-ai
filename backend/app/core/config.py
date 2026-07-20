@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -10,9 +11,13 @@ ENV_FILE = BASE_DIR / ".env"
 class Settings(BaseSettings):
     app_name: str = "SupportPilot AI"
     environment: str = "local"
+
     database_url: str = (
         "postgresql+psycopg://supportpilot:supportpilot@localhost:5433/supportpilot"
     )
+
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str = "gemini-2.5-flash"
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
