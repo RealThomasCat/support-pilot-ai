@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -5,9 +6,13 @@ from sqlalchemy.orm import Session
 from app.db.models.conversation import Conversation
 from app.db.models.message import Message, MessageRole
 from app.integrations.llm.gemini_provider import (
+    GeminiProviderError,
     generate_assistant_response,
 )
 from app.services.message_service import create_message, list_messages
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -41,9 +46,18 @@ def send_chat_message(
         conversation_id=conversation.id,
     )
 
-    assistant_content = generate_assistant_response(
-        messages=history,
-    )
+    try:
+        assistant_content = generate_assistant_response(
+            messages=history,
+        )
+    except GeminiProviderError:
+        logger.exception(
+            "Gemini response generation failed for conversation_id=%s "
+            "user_message_id=%s",
+            conversation.id,
+            user_message.id,
+        )
+        raise
 
     assistant_message = create_message(
         db=db,

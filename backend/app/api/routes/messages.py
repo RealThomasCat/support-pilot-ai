@@ -10,6 +10,7 @@ from app.schemas.message import MessageCreate, MessageResponse
 from app.services.chat_service import send_chat_message
 from app.services.conversation_service import get_conversation
 from app.services.message_service import list_messages
+from app.integrations.llm.gemini_provider import GeminiProviderError
 
 
 router = APIRouter(
@@ -42,11 +43,17 @@ def create_message_endpoint(
         )
 
     # Use the chat service to persist the user message, generate a Gemini response, and persist the assistant message.
-    result = send_chat_message(
-        db=db,
-        conversation=conversation,
-        content=payload.content,
-    )
+    try:
+        result = send_chat_message(
+            db=db,
+            conversation=conversation,
+            content=payload.content,
+        )
+    except GeminiProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The AI provider is temporarily unavailable.",
+        ) from exc
 
     # Return a ChatResponse containing the persisted user and assistant messages.
     return ChatResponse(
