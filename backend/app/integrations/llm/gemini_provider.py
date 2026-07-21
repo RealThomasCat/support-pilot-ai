@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 from google import genai
-from google.genai import types
+from google.genai import types, errors
 
 from app.core.config import settings
 from app.db.models.message import Message, MessageRole
@@ -28,6 +28,10 @@ class GeminiProviderError(RuntimeError):
 
 class GeminiConfigurationError(GeminiProviderError):
     """Raised when Gemini configuration is missing or invalid."""
+
+
+class GeminiRequestError(GeminiProviderError):
+    """Raised when a request to Gemini cannot be completed."""
 
 
 class GeminiResponseError(GeminiProviderError):
@@ -115,14 +119,23 @@ def generate_assistant_response(
     api_key = _get_api_key()
     contents = _to_gemini_contents(messages)
 
-    with genai.Client(api_key=api_key) as client:
-        response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-            ),
-        )
+    try:
+        with genai.Client(api_key=api_key) as client:
+            response = client.models.generate_content(
+                model=settings.gemini_model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                ),
+            )
+    except errors.APIError as exc:
+        raise GeminiRequestError(
+            "Gemini request failed."
+        ) from exc
+    except (TimeoutError, ConnectionError, OSError) as exc:
+        raise GeminiRequestError(
+            "Gemini could not be reached."
+        ) from exc
 
     response_text = response.text
 
