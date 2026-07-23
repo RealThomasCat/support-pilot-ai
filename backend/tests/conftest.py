@@ -76,3 +76,20 @@ def client() -> Generator[TestClient, None, None]:
 
     # Clear the dependency overrides after the test is done.
     app.dependency_overrides.clear()
+
+
+# Pytest fixture to provide a test database session for service-layer tests.
+@pytest.fixture
+def db_session() -> Generator[Session, None, None]:
+    """
+    Provide a direct test database session for service-layer tests.
+
+    API tests use the client fixture and FastAPI dependency override.
+    Service tests request this fixture directly.
+    """
+    db = TestingSessionLocal()
+
+    try:
+        yield db
+    finally:
+        db.close()
