@@ -2,10 +2,13 @@ from datetime import datetime
 from typing import Any
 
 from fastapi.testclient import TestClient
+from google.genai import types
 from pytest import MonkeyPatch
 
-from app.db.models.message import Message
-from app.integrations.llm.gemini_provider import GeminiRequestError
+from app.integrations.llm.gemini_provider import (
+    GeminiRequestError,
+    GeminiTurn,
+)
 
 
 def create_conversation(
@@ -23,6 +26,27 @@ def create_conversation(
     return response.json()
 
 
+def final_text_turn(
+    text: str,
+) -> GeminiTurn:
+    """
+    Create a mocked Gemini turn containing final assistant text
+    and no function calls.
+    """
+    return GeminiTurn(
+        content=types.Content(
+            role="model",
+            parts=[
+                types.Part.from_text(
+                    text=text,
+                )
+            ],
+        ),
+        function_calls=[],
+        text=text,
+    )
+
+
 def mock_gemini_response(
     monkeypatch: MonkeyPatch,
     *,
@@ -32,19 +56,20 @@ def mock_gemini_response(
     Replace the real Gemini call with a deterministic local function.
 
     The patch targets chat_service because that is where
-    generate_assistant_response is imported and called.
+    generate_model_turn is imported and called.
     """
 
-    def fake_generate_assistant_response(
+    def fake_generate_model_turn(
         *,
-        messages: list[Message],
-    ) -> str:
-        assert messages
-        return response_text
+        contents: list[types.Content],
+    ) -> GeminiTurn:
+        assert contents
+
+        return final_text_turn(response_text)
 
     monkeypatch.setattr(
-        "app.services.chat_service.generate_assistant_response",
-        fake_generate_assistant_response,
+        "app.services.chat_service.generate_model_turn",
+        fake_generate_model_turn,
     )
 
 
@@ -149,25 +174,40 @@ def test_full_ordered_history_is_sent_to_gemini(
 ) -> None:
     provider_calls: list[list[tuple[str, str]]] = []
 
-    def fake_generate_assistant_response(
+    def fake_generate_model_turn(
         *,
-        messages: list[Message],
-    ) -> str:
-        provider_calls.append(
-            [
-                (message.role.value, message.content)
-                for message in messages
-            ]
-        )
+        contents: list[types.Content],
+    ) -> GeminiTurn:
+        captured_contents: list[tuple[str, str]] = []
+
+        for content in contents:
+            text = ""
+
+            for part in content.parts or []:
+                if part.text is not None:
+                    text += part.text
+
+            captured_contents.append(
+                (
+                    content.role or "",
+                    text,
+                )
+            )
+
+        provider_calls.append(captured_contents)
 
         if len(provider_calls) == 1:
-            return "Ask for both transaction IDs."
+            return final_text_turn(
+                "Ask for both transaction IDs."
+            )
 
-        return "Both IDs help identify and compare the charges."
+        return final_text_turn(
+            "Both IDs help identify and compare the charges."
+        )
 
     monkeypatch.setattr(
-        "app.services.chat_service.generate_assistant_response",
-        fake_generate_assistant_response,
+        "app.services.chat_service.generate_model_turn",
+        fake_generate_model_turn,
     )
 
     conversation = create_conversation(client)
@@ -205,7 +245,7 @@ def test_full_ordered_history_is_sent_to_gemini(
             "A customer says they were charged twice.",
         ),
         (
-            "assistant",
+            "model",
             "Ask for both transaction IDs.",
         ),
         (
@@ -219,19 +259,19 @@ def test_provider_failure_returns_503_and_keeps_user_message(
     client: TestClient,
     monkeypatch: MonkeyPatch,
 ) -> None:
-    def fake_generate_assistant_response(
+    def fake_generate_model_turn(
         *,
-        messages: list[Message],
-    ) -> str:
-        assert messages
+        contents: list[types.Content],
+    ) -> GeminiTurn:
+        assert contents
 
         raise GeminiRequestError(
             "Gemini request failed.",
         )
 
     monkeypatch.setattr(
-        "app.services.chat_service.generate_assistant_response",
-        fake_generate_assistant_response,
+        "app.services.chat_service.generate_model_turn",
+        fake_generate_model_turn,
     )
 
     conversation = create_conversation(client)
@@ -371,18 +411,21 @@ def test_unknown_conversation_message_endpoints_return_404(
 ) -> None:
     provider_was_called = False
 
-    def fake_generate_assistant_response(
+    def fake_generate_model_turn(
         *,
-        messages: list[Message],
-    ) -> str:
+        contents: list[types.Content],
+    ) -> GeminiTurn:
         nonlocal provider_was_called
 
         provider_was_called = True
-        return "This should never be returned."
+
+        return final_text_turn(
+            "This should never be returned."
+        )
 
     monkeypatch.setattr(
-        "app.services.chat_service.generate_assistant_response",
-        fake_generate_assistant_response,
+        "app.services.chat_service.generate_model_turn",
+        fake_generate_model_turn,
     )
 
     create_response = client.post(
@@ -412,18 +455,21 @@ def test_invalid_message_content_returns_422(
 ) -> None:
     provider_was_called = False
 
-    def fake_generate_assistant_response(
+    def fake_generate_model_turn(
         *,
-        messages: list[Message],
-    ) -> str:
+        contents: list[types.Content],
+    ) -> GeminiTurn:
         nonlocal provider_was_called
 
         provider_was_called = True
-        return "This should never be returned."
+
+        return final_text_turn(
+            "This should never be returned."
+        )
 
     monkeypatch.setattr(
-        "app.services.chat_service.generate_assistant_response",
-        fake_generate_assistant_response,
+        "app.services.chat_service.generate_model_turn",
+        fake_generate_model_turn,
     )
 
     conversation = create_conversation(client)
