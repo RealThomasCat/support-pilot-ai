@@ -18,9 +18,9 @@ from app.integrations.llm.gemini_provider import (
 from app.services.message_service import create_message, list_messages
 from app.services.tool_execution_service import (
     ToolExecutionResult,
-    ToolExecutionStatus,
     execute_tool,
 )
+from app.tools.types import ToolExecutionStatus
 
 
 logger = logging.getLogger(__name__)

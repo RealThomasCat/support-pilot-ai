@@ -7,11 +7,11 @@ from app.db.models.ticket import (
 )
 from app.schemas.ticket import TicketCreate
 from app.services.ticket_service import create_ticket
-from app.services.tool_execution_service import (
+from app.services.tool_execution_service import execute_tool
+from app.tools.types import (
     ToolExecutionStatus,
     ToolFailureType,
     ToolValidationStatus,
-    execute_tool,
 )
 
 

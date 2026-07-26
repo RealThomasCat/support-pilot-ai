@@ -12,7 +12,7 @@ from app.tools.types import (
 class ToolCallResponse(BaseModel):
     id: int
     conversation_id: int
-    message_id: int | None
+    message_id: int
     tool_name: str
     requested_arguments: dict[str, Any]
     validated_arguments: dict[str, Any] | None
