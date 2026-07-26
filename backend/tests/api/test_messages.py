@@ -10,6 +10,16 @@ from app.integrations.llm.gemini_provider import (
     GeminiTurn,
 )
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.db.models.tool_call import ToolCall
+
+from app.tools.types import (
+    ToolExecutionStatus,
+    ToolFailureType,
+)
+
 
 def create_conversation(
     client: TestClient,
@@ -70,6 +80,34 @@ def mock_gemini_response(
     monkeypatch.setattr(
         "app.services.chat_service.generate_model_turn",
         fake_generate_model_turn,
+    )
+
+
+def function_call_turn(
+    *,
+    call_id: str,
+    name: str,
+    arguments: dict[str, Any],
+) -> GeminiTurn:
+    function_call = types.FunctionCall(
+        id=call_id,
+        name=name,
+        args=arguments,
+    )
+
+    content = types.Content(
+        role="model",
+        parts=[
+            types.Part(
+                function_call=function_call,
+            )
+        ],
+    )
+
+    return GeminiTurn(
+        content=content,
+        function_calls=[function_call],
+        text=None,
     )
 
 
@@ -523,3 +561,73 @@ def test_creating_chat_message_updates_conversation_updated_at(
     )
 
     assert new_updated_at > original_updated_at
+
+
+def test_tool_execution_is_persisted_during_chat(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    provider_call_count = 0
+
+    def fake_generate_model_turn(
+        *,
+        contents: list[types.Content],
+    ) -> GeminiTurn:
+        nonlocal provider_call_count
+        provider_call_count += 1
+
+        if provider_call_count == 1:
+            return function_call_turn(
+                call_id="call-1",
+                name="get_ticket",
+                arguments={
+                    "ticket_id": 999999,
+                },
+            )
+
+        return final_text_turn(
+            "Ticket 999999 was not found."
+        )
+
+    monkeypatch.setattr(
+        "app.services.chat_service.generate_model_turn",
+        fake_generate_model_turn,
+    )
+
+    conversation = create_conversation(client)
+    conversation_id = conversation["id"]
+
+    response = client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={
+            "content": "Get ticket 999999.",
+        },
+    )
+
+    assert response.status_code == 201
+
+    response_data = response.json()
+    user_message_id = response_data["user_message"]["id"]
+
+    statement = select(ToolCall).where(
+        ToolCall.conversation_id == conversation_id
+    )
+
+    tool_calls = list(
+        db_session.scalars(statement).all()
+    )
+
+    assert len(tool_calls) == 1
+
+    tool_call = tool_calls[0]
+
+    assert tool_call.message_id == user_message_id
+    assert tool_call.tool_name == "get_ticket"
+    assert tool_call.requested_arguments == {
+        "ticket_id": 999999,
+    }
+    assert tool_call.status == ToolExecutionStatus.FAILED
+    assert tool_call.failure_type == ToolFailureType.NOT_FOUND
+    assert tool_call.started_at is not None
+    assert tool_call.completed_at is not None
