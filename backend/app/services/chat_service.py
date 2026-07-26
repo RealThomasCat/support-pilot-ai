@@ -20,6 +20,7 @@ from app.services.tool_execution_service import (
     ToolExecutionResult,
     execute_tool,
 )
+from app.services.tool_call_service import create_tool_call_log
 from app.tools.types import ToolExecutionStatus
 
 
@@ -73,6 +74,8 @@ def _build_function_response_data(
 def _generate_tool_aware_response(
     *,
     db: Session,
+    conversation_id: int,
+    user_message_id: int,
     history: list[Message],
 ) -> tuple[str, list[ToolExecutionResult]]:
     """
@@ -132,6 +135,15 @@ def _generate_tool_aware_response(
                 db=db,
                 tool_name=function_call.name,
                 raw_arguments=raw_arguments,
+            )
+
+            # Persist every attempted execution before continuing the agent loop.
+            # This includes successes, validation failures, unsupported tools, not-found results, and execution failures.
+            create_tool_call_log(
+                db=db,
+                conversation_id=conversation_id,
+                message_id=user_message_id,
+                execution=execution,
             )
 
             # Add the tool execution result to executions.
@@ -196,6 +208,8 @@ def send_chat_message(
         assistant_content, tool_executions = (
             _generate_tool_aware_response(
                 db=db,
+                conversation_id=conversation.id,
+                user_message_id=user_message.id,
                 history=history,
             )
         )
