@@ -8,7 +8,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.message import Message
-
+    from app.db.models.tool_call import ToolCall
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -36,5 +36,9 @@ class Conversation(Base):
     )
 
     messages: Mapped[list["Message"]] = relationship(
+        back_populates="conversation",
+    )
+
+    tool_calls: Mapped[list["ToolCall"]] = relationship(
         back_populates="conversation",
     )

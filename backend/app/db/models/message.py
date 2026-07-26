@@ -9,6 +9,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.conversation import Conversation
+    from app.db.models.tool_call import ToolCall
 
 
 class MessageRole(StrEnum):
@@ -54,3 +55,7 @@ class Message(Base):
     conversation: Mapped["Conversation"] = relationship(
         back_populates="messages",
     )
+
+    tool_calls: Mapped[list["ToolCall"]] = relationship(
+    back_populates="message",
+)
