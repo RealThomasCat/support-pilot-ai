@@ -88,7 +88,7 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-# Helper function to voncert Pydantic validation error into a concise message.
+# Helper function to convert Pydantic validation error into a concise message.
 def _format_validation_error(
     error: ValidationError,
 ) -> str:
