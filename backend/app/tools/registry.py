@@ -67,9 +67,12 @@ TOOL_REGISTRY: dict[str, ToolRegistration] = {
     "list_tickets": ToolRegistration(
         name="list_tickets",
         description=(
-            "Search, filter, or review multiple support tickets. "
-            "Use this when the support agent wants to find tickets but "
-            "does not already have one specific ticket ID."
+            "Search, filter, or review multiple support tickets. Use this when "
+            "the support agent wants to find tickets, when no specific ticket "
+            "ID is known, or when a ticket reference must be resolved from "
+            "customer or issue details. If the result contains multiple plausible "
+            "matches for an action affecting one ticket, do not choose one "
+            "arbitrarily; ask the support agent to clarify."
         ),
         argument_model=ListTicketsArguments,
         handler=list_tickets_tool,
@@ -77,9 +80,10 @@ TOOL_REGISTRY: dict[str, ToolRegistration] = {
     "get_ticket": ToolRegistration(
         name="get_ticket",
         description=(
-            "Retrieve complete information for one support ticket by its "
-            "database ID. Use this when the support agent refers to a "
-            "specific known ticket ID."
+            "Retrieve complete information for one support ticket by its database "
+            "ID. Use this when a specific ticket ID is known, when full ticket "
+            "context is required, or before drafting a customer reply from that "
+            "ticket's details. This is a read-only operation."
         ),
         argument_model=GetTicketArguments,
         handler=get_ticket_tool,
@@ -87,9 +91,11 @@ TOOL_REGISTRY: dict[str, ToolRegistration] = {
     "create_ticket": ToolRegistration(
         name="create_ticket",
         description=(
-            "Create a new customer-support ticket. Use this only when the "
-            "support agent clearly asks to create or open a new ticket and "
-            "provides the required customer and issue information."
+            "Create a new customer-support ticket. This is a write operation. "
+            "Use it only when the support agent clearly and directly asks to "
+            "create or open a ticket and provides all required customer and issue "
+            "information. Do not create a ticket from a hypothetical request, "
+            "suggestion, question, or general discussion."
         ),
         argument_model=CreateTicketArguments,
         handler=create_ticket_tool,
@@ -97,9 +103,12 @@ TOOL_REGISTRY: dict[str, ToolRegistration] = {
     "update_ticket_status": ToolRegistration(
         name="update_ticket_status",
         description=(
-            "Update the status of one existing support ticket. Use this only "
-            "when the support agent clearly requests a status change for a "
-            "specific ticket."
+            "Update the status of one existing support ticket. This is a write "
+            "operation. Use it only when the support agent clearly and directly "
+            "requests a status change for one unambiguously identified ticket. "
+            "Do not update status when the agent merely describes the ticket, "
+            "suggests a possible status, asks whether it should change, or speaks "
+            "hypothetically."
         ),
         argument_model=UpdateTicketStatusArguments,
         handler=update_ticket_status_tool,
@@ -107,9 +116,12 @@ TOOL_REGISTRY: dict[str, ToolRegistration] = {
     "update_ticket_classification": ToolRegistration(
         name="update_ticket_classification",
         description=(
-            "Persist a category, priority, or both for an existing support "
-            "ticket. Use this only when the support agent clearly asks to "
-            "classify or reclassify a specific ticket."
+            "Persist a category, priority, or both for one existing support "
+            "ticket. This is a write operation. Use it only when the support "
+            "agent clearly and directly asks to classify, reclassify, or assign "
+            "priority to one unambiguously identified ticket. Do not persist a "
+            "classification when the agent only asks for an opinion, suggestion, "
+            "analysis, or hypothetical recommendation."
         ),
         argument_model=UpdateTicketClassificationArguments,
         handler=update_ticket_classification_tool,
