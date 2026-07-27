@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -122,3 +123,36 @@ def create_tool_call_log(
         ) from exc
 
     return tool_call
+
+
+def list_tool_calls_for_conversation(
+    *,
+    db: Session,
+    conversation_id: int,
+) -> list[ToolCall]:
+    """
+    Return tool calls for one conversation in execution order.
+    """
+    statement = (
+        select(ToolCall)
+        .where(
+            ToolCall.conversation_id == conversation_id,
+        )
+        .order_by(
+            ToolCall.started_at.asc(),
+            ToolCall.id.asc(),
+        )
+    )
+
+    return list(db.scalars(statement).all())
+
+
+def get_tool_call(
+    *,
+    db: Session,
+    tool_call_id: int,
+) -> ToolCall | None:
+    """
+    Return one tool-call log by ID.
+    """
+    return db.get(ToolCall, tool_call_id)
