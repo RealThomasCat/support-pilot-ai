@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api.routes import health, tickets, conversations, messages
+from app.api.routes import health, tickets, conversations, messages, tool_calls
 from app.core.config import settings
 
 
@@ -10,6 +10,7 @@ def create_app() -> FastAPI:
     app.include_router(tickets.router)
     app.include_router(conversations.router)
     app.include_router(messages.router)
+    app.include_router(tool_calls.router)
     return app
 
 
