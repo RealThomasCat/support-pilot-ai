@@ -122,7 +122,7 @@ def test_chat_executes_tool_and_returns_final_response(
 
         tool_content = contents[-1]
 
-        assert tool_content.role == "tool"
+        assert tool_content.role == "user"
         assert tool_content.parts is not None
         assert len(tool_content.parts) == 1
 
@@ -296,7 +296,7 @@ def test_multiple_tool_calls_in_one_turn(
 
         tool_content = contents[-1]
 
-        assert tool_content.role == "tool"
+        assert tool_content.role == "user"
         assert tool_content.parts is not None
         assert len(tool_content.parts) == 2
 

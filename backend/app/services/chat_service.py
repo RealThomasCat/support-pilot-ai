@@ -113,7 +113,7 @@ def _generate_tool_aware_response(
         contents.append(turn.content)
 
         # Collect one Gemini function-response part for every tool call requested in this model turn.
-        # All responses from this turn will be returned together in one role="tool" Content object.
+        # Gemini's generateContent API expects function responses in role="user" content.
         function_response_parts: list[types.Part] = []
 
         # Validate and execute every function call requested in this Gemini turn.
@@ -151,7 +151,7 @@ def _generate_tool_aware_response(
 
             # Convert the tool execution result into a Gemini function-response Part.
             # The call ID lets Gemini match this response to the corresponding function call.
-            # All response Parts from this model turn are later grouped into one role="tool" Content object.
+            # All response Parts from this model turn are later grouped into one role="user" Content object.
             function_response_parts.append(
                 create_function_response_part(
                     function_call_id=function_call.id,
@@ -166,7 +166,7 @@ def _generate_tool_aware_response(
         # These contents are sent back to Gemini in the next loop iteration.
         contents.append(
             types.Content(
-                role="tool",
+                role="user",
                 parts=function_response_parts,
             )
         )

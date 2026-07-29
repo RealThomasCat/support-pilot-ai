@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     )
 
     gemini_api_key: SecretStr | None = None
-    gemini_model: str = "gemini-3.5-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
     gemini_max_tool_rounds: int = Field(
         default=5,
         ge=1,
