@@ -36,12 +36,17 @@ TestingSessionLocal = sessionmaker(
 # A fixture is a function that prepares something a test needs. It runs before the test and can clean up afterward.
 # The `autouse=True` parameter means this fixture will run automatically for every test without needing to be explicitly requested.
 @pytest.fixture(autouse=True)
-def reset_test_database() -> Generator[None, None, None]:
+def reset_test_database(
+    request: pytest.FixtureRequest,
+) -> Generator[None, None, None]:
     """
     Recreate the test tables before every test.
 
     This gives every test a clean and predictable database.
     """
+    if request.node.get_closest_marker("no_db") is not None:
+        yield
+        return
 
     Base.metadata.drop_all(bind=test_engine)
     Base.metadata.create_all(bind=test_engine)
