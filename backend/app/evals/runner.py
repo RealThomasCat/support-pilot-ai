@@ -1,5 +1,34 @@
+# SupportPilot AI live eval runner.
+#
+# This module runs fixed eval cases through the real Gemini assistant
+# workflow. Each case receives a fresh eval database with predictable
+# seed data. The runner captures tool executions, grades expected
+# behavior and final database state, and reports PASS, FAIL, or ERROR.
+#
+# Commands — run from the backend/ directory:
+#
+# Run all eval cases:
+#   .\.venv\Scripts\python.exe -m app.evals.runner
+#
+# List all available eval cases:
+#   .\.venv\Scripts\python.exe -m app.evals.runner --list
+#
+# Run one eval case:
+#   .\.venv\Scripts\python.exe -m app.evals.runner --case update_ticket_status
+#
+# Check the exit code in PowerShell:
+#   $LASTEXITCODE
+#
+# Exit codes:
+#   0 = Every executed eval passed.
+#   1 = At least one eval failed or encountered an execution error.
+#   2 = Invalid command usage or invalid eval-case configuration.
+
+
+import argparse
 import sys
 from collections.abc import Sequence
+from time import perf_counter
 
 from sqlalchemy.orm import Session
 
@@ -24,17 +53,64 @@ from app.services.tool_call_service import (
 )
 
 
-# Function to execute a single eval case.
+EXIT_SUCCESS = 0
+EXIT_EVAL_FAILURE = 1
+EXIT_USAGE_ERROR = 2
+
+
+# Validate eval case definitions before running the suite.
+def validate_eval_cases(
+    cases: Sequence[EvalCase],
+) -> None:
+    """
+    Validate the static eval-case collection before execution.
+
+    Duplicate names would make selecting one case ambiguous.
+    Cases without prompts cannot execute a chat workflow.
+    """
+    seen_names: set[str] = set()
+
+    for case in cases:
+        if case.name in seen_names:
+            raise ValueError(
+                f"Duplicate eval case name: {case.name}"
+            )
+
+        seen_names.add(case.name)
+
+        if not case.prompts:
+            raise ValueError(
+                f"Eval case '{case.name}' has no prompts."
+            )
+
+
+# Find an eval case by its unique name.
+def find_eval_case(
+    *,
+    cases: Sequence[EvalCase],
+    case_name: str,
+) -> EvalCase | None:
+    """
+    Find one eval case by its unique name.
+    """
+    for case in cases:
+        if case.name == case_name:
+            return case
+
+    return None
+
+
+# Execute all prompts belonging to one eval case in one conversation.
 def execute_eval_case(
     *,
     db: Session,
     case: EvalCase,
 ) -> EvalObservation:
     """
-    Send every case prompt through one real conversation.
+    Send every prompt through one real Gemini conversation.
 
-    A normal case contains one prompt. A context case contains multiple
-    prompts that reuse the same persisted conversation history.
+    Multi-turn cases reuse the same conversation so previous messages
+    remain available to the assistant.
     """
     conversation = create_conversation(
         db=db,
@@ -61,7 +137,7 @@ def execute_eval_case(
 
     if final_assistant_message is None:
         raise ValueError(
-            f"Eval case '{case.name}' has no prompts."
+            f"Eval case '{case.name}' produced no assistant message."
         )
 
     persisted_tool_calls = (
@@ -78,14 +154,17 @@ def execute_eval_case(
     )
 
 
-# Function to reset and seed DB, excecute then grade a eval case.
+# Reset and seed the eval database, then execute and grade one case.
 def run_eval_case(
     case: EvalCase,
 ) -> EvalResult:
     """
-    Reset, seed, execute, and grade one eval case.
+    Reset, seed, execute, and grade one isolated eval case.
     """
+    started_at = perf_counter()
+
     try:
+        # Every case receives a completely fresh database.
         reset_eval_database()
 
         with eval_session() as db:
@@ -98,14 +177,14 @@ def run_eval_case(
                 case=case,
             )
 
-            return grade_eval_case(
+            result = grade_eval_case(
                 db=db,
                 case=case,
                 observation=observation,
             )
 
     except GeminiProviderError as exc:
-        return EvalResult(
+        result = EvalResult(
             case_name=case.name,
             status=EvalStatus.ERROR,
             reasons=[
@@ -114,7 +193,7 @@ def run_eval_case(
         )
 
     except Exception as exc:
-        return EvalResult(
+        result = EvalResult(
             case_name=case.name,
             status=EvalStatus.ERROR,
             reasons=[
@@ -123,28 +202,69 @@ def run_eval_case(
             ],
         )
 
+    result.duration_seconds = (
+        perf_counter() - started_at
+    )
 
-# Function to run all eval cases.
+    return result
+
+
+# Run the supplied eval cases sequentially and collect their results.
 def run_eval_suite(
     cases: Sequence[EvalCase],
 ) -> list[EvalResult]:
-    return [
-        run_eval_case(case)
-        for case in cases
-    ]
+    """
+    Run eval cases sequentially.
+
+    Each case resets and reseeds the eval database independently.
+    """
+    results: list[EvalResult] = []
+
+    for index, case in enumerate(
+        cases,
+        start=1,
+    ):
+        print(
+            f"Running {index}/{len(cases)}: "
+            f"{case.name}"
+        )
+
+        result = run_eval_case(
+            case,
+        )
+
+        results.append(
+            result
+        )
+
+        print_result(
+            result,
+        )
+
+    return results
 
 
-# Function to print the result of an individual eval case.
+# Print the result and failure details for one eval case.
 def print_result(
     result: EvalResult,
 ) -> None:
+    duration_text = ""
+
+    if result.duration_seconds is not None:
+        duration_text = (
+            f" ({result.duration_seconds:.2f}s)"
+        )
+
     print(
         f"{result.status.value.upper():5} "
         f"{result.case_name}"
+        f"{duration_text}"
     )
 
     for reason in result.reasons:
-        print(f"      {reason}")
+        print(
+            f"      {reason}"
+        )
 
     if result.assistant_text:
         print(
@@ -152,8 +272,10 @@ def print_result(
             f"{result.assistant_text}"
         )
 
+    print()
 
-# Function to print overall results.
+
+# Print the overall pass, fail, error, and duration summary.
 def print_summary(
     results: Sequence[EvalResult],
 ) -> None:
@@ -172,34 +294,154 @@ def print_summary(
         for result in results
     )
 
-    print()
-
-    print(
-        f"Eval results: {passed} passed, "
-        f"{failed} failed, {errors} errors"
-    )
-
-
-# Run the suit and return exit code 0 or 1.
-def main() -> int:
-    results = run_eval_suite(
-        EVAL_CASES,
-    )
-
-    for result in results:
-        print_result(result)
-
-    print_summary(results)
-
-    has_failure = any(
-        result.status in {
-            EvalStatus.FAIL,
-            EvalStatus.ERROR,
-        }
+    total_duration = sum(
+        result.duration_seconds or 0
         for result in results
     )
 
-    return 1 if has_failure else 0
+    print("=" * 60)
+
+    print(
+        f"Eval results: {passed} passed, "
+        f"{failed} failed, "
+        f"{errors} errors"
+    )
+
+    print(
+        f"Cases run: {len(results)}"
+    )
+
+    print(
+        f"Total duration: {total_duration:.2f}s"
+    )
+
+    print("=" * 60)
+
+
+# Print the names and descriptions of all available eval cases.
+def list_eval_cases(
+    cases: Sequence[EvalCase],
+) -> None:
+    """
+    Print available case names and descriptions.
+    """
+    print("Available eval cases:")
+
+    for case in cases:
+        print(
+            f"  {case.name}"
+        )
+
+        print(
+            f"    {case.description}"
+        )
+
+
+# Parse command-line options such as --list and --case.
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run SupportPilot AI live Gemini eval cases."
+        )
+    )
+
+    parser.add_argument(
+        "--case",
+        dest="case_name",
+        help=(
+            "Run one eval case by name. "
+            "Without this option, all cases run."
+        ),
+    )
+
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List available eval cases and exit.",
+    )
+
+    return parser.parse_args()
+
+
+# Determine the process exit code from the completed eval results.
+def determine_exit_code(
+    results: Sequence[EvalResult],
+) -> int:
+    """
+    Return success only when every executed case passed.
+    """
+    if all(
+        result.status == EvalStatus.PASS
+        for result in results
+    ):
+        return EXIT_SUCCESS
+
+    return EXIT_EVAL_FAILURE
+
+
+# Validate configuration, process arguments, run the suite, and return an exit code.
+def main() -> int:
+    try:
+        validate_eval_cases(
+            EVAL_CASES,
+        )
+    except ValueError as exc:
+        print(
+            f"Eval configuration error: {exc}",
+            file=sys.stderr,
+        )
+
+        return EXIT_USAGE_ERROR
+
+    arguments = parse_arguments()
+
+    if arguments.list:
+        list_eval_cases(
+            EVAL_CASES,
+        )
+
+        return EXIT_SUCCESS
+
+    cases_to_run: Sequence[EvalCase]
+
+    if arguments.case_name:
+        selected_case = find_eval_case(
+            cases=EVAL_CASES,
+            case_name=arguments.case_name,
+        )
+
+        if selected_case is None:
+            print(
+                f"Unknown eval case: "
+                f"{arguments.case_name}",
+                file=sys.stderr,
+            )
+
+            print(
+                "Use --list to view available cases.",
+                file=sys.stderr,
+            )
+
+            return EXIT_USAGE_ERROR
+
+        cases_to_run = [
+            selected_case,
+        ]
+
+    else:
+        cases_to_run = EVAL_CASES
+
+    results = run_eval_suite(
+        cases_to_run,
+    )
+
+    print_summary(
+        results,
+    )
+
+    return determine_exit_code(
+        results,
+    )
 
 
 if __name__ == "__main__":

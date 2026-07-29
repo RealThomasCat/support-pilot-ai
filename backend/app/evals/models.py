@@ -108,3 +108,4 @@ class EvalResult:
     status: EvalStatus
     reasons: list[str] = field(default_factory=list)
     assistant_text: str | None = None
+    duration_seconds: float | None = None
