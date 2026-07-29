@@ -3,7 +3,8 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db import models  # noqa: F401
@@ -19,6 +20,47 @@ TEST_DATABASE_URL = os.getenv(
         "@localhost:5433/supportpilot_test"
     ),
 )
+
+
+# Create supportpilot_test automatically inside that same Postgres container if it does not exist yet.
+def ensure_test_database_exists(database_url: str) -> None:
+    """
+    Create the configured test database when the local Postgres service
+    is running but the test database has not been created yet.
+    """
+    url = make_url(database_url)
+    database_name = url.database
+
+    if database_name is None:
+        return
+
+    maintenance_url = url.set(database="postgres")
+    maintenance_engine = create_engine(
+        maintenance_url,
+        isolation_level="AUTOCOMMIT",
+        pool_pre_ping=True,
+    )
+
+    try:
+        with maintenance_engine.connect() as connection:
+            database_exists = connection.scalar(
+                text(
+                    "SELECT 1 FROM pg_database "
+                    "WHERE datname = :database_name"
+                ),
+                {"database_name": database_name},
+            )
+
+            if database_exists is None:
+                quoted_database_name = database_name.replace('"', '""')
+                connection.execute(
+                    text(f'CREATE DATABASE "{quoted_database_name}"')
+                )
+    finally:
+        maintenance_engine.dispose()
+
+
+ensure_test_database_exists(TEST_DATABASE_URL)
 
 test_engine = create_engine(
     TEST_DATABASE_URL,
