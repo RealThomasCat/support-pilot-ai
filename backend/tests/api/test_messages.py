@@ -727,18 +727,16 @@ def test_reply_draft_uses_ticket_context_without_updating_ticket(
             )
 
         # Verify that the backend returned the tool result to Gemini.
-        tool_contents = [
-            content
+        function_responses = [
+            part.function_response
             for content in contents
-            if content.role == "tool"
+            for part in content.parts or []
+            if part.function_response is not None
         ]
 
-        assert len(tool_contents) == 1
+        assert len(function_responses) == 1
 
-        tool_content = tool_contents[0]
-        assert tool_content.parts
-
-        function_response = tool_content.parts[0].function_response
+        function_response = function_responses[0]
         assert function_response is not None
         assert function_response.name == "get_ticket"
 

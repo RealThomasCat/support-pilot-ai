@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi.testclient import TestClient
 
 # Helper function to create a ticket payload for testing purposes.
@@ -192,6 +194,46 @@ def test_partial_update_preserves_unspecified_fields(
     assert updated_ticket["description"] == (
         original_ticket["description"]
     )
+
+
+def test_same_value_update_preserves_updated_at(
+    client: TestClient,
+) -> None:
+    create_response = client.post(
+        "/tickets",
+        json=ticket_payload(),
+    )
+
+    assert create_response.status_code == 201
+
+    ticket_id = create_response.json()["id"]
+
+    first_update_response = client.patch(
+        f"/tickets/{ticket_id}",
+        json={"status": "resolved"},
+    )
+
+    assert first_update_response.status_code == 200
+
+    first_updated_ticket = first_update_response.json()
+    first_updated_at = datetime.fromisoformat(
+        first_updated_ticket["updated_at"],
+    )
+
+    second_update_response = client.patch(
+        f"/tickets/{ticket_id}",
+        json={"status": "resolved"},
+    )
+
+    assert second_update_response.status_code == 200
+
+    second_updated_ticket = second_update_response.json()
+    second_updated_at = datetime.fromisoformat(
+        second_updated_ticket["updated_at"],
+    )
+
+    assert second_updated_ticket["status"] == "resolved"
+    assert second_updated_at == first_updated_at
 
 
 def test_get_and_update_nonexistent_ticket_return_404(
