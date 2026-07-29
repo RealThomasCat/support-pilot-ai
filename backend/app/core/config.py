@@ -16,6 +16,11 @@ class Settings(BaseSettings):
         "postgresql+psycopg://supportpilot:supportpilot@localhost:5433/supportpilot"
     )
 
+    eval_database_url: str = (
+        "postgresql+psycopg://supportpilot:supportpilot"
+        "@localhost:5433/supportpilot_eval"
+    )
+
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.5-flash"
     gemini_max_tool_rounds: int = Field(
