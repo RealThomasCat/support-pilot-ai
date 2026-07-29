@@ -158,6 +158,18 @@ def _get_api_key() -> str:
     return api_key
 
 
+def _get_http_options() -> types.HttpOptions | None:
+    """
+    Return Gemini HTTP options when runtime overrides are configured.
+    """
+    if settings.gemini_request_timeout_ms is None:
+        return None
+
+    return types.HttpOptions(
+        timeout=settings.gemini_request_timeout_ms,
+    )
+
+
 # Function to convert messages stored in DB into the format Gemini expects.
 def to_gemini_contents(
     messages: Sequence[Message],
@@ -215,7 +227,10 @@ def generate_model_turn(
 
     # Send one response generation request to gemini.
     try:
-        with genai.Client(api_key=api_key) as client:
+        with genai.Client(
+            api_key=api_key,
+            http_options=_get_http_options(),
+        ) as client:
             response = client.models.generate_content(
                 model=settings.gemini_model,
                 contents=list(contents), # Conversation content.

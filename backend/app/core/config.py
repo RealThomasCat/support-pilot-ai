@@ -24,10 +24,14 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.5-flash"
     gemini_max_tool_rounds: int = Field(
-    default=5,
-    ge=1,
-    le=10,
-)
+        default=5,
+        ge=1,
+        le=10,
+    )
+    gemini_request_timeout_ms: int | None = Field(
+        default=None,
+        ge=1,
+    )
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
