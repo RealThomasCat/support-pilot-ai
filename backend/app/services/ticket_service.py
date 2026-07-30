@@ -1,4 +1,7 @@
+import logging
+
 from sqlalchemy import Select, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.models.ticket import Ticket
@@ -7,6 +10,10 @@ from app.schemas.ticket import (
     TicketFilters,
     TicketUpdate,
 )
+from app.services.errors import DatabaseWriteError
+
+
+logger = logging.getLogger(__name__)
 
 
 # Custom exception for when a ticket is not found in the database.
@@ -39,9 +46,16 @@ def create_ticket(
         priority=ticket_data.priority,
     )
 
-    db.add(ticket)
-    db.commit()
-    db.refresh(ticket)
+    try:
+        db.add(ticket)
+        db.commit()
+        db.refresh(ticket)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Failed to create ticket.")
+        raise DatabaseWriteError(
+            "The ticket could not be saved."
+        ) from exc
 
     return ticket
 
@@ -157,7 +171,17 @@ def update_ticket(
 
     # NOTE: We don't need to call db.add(ticket) here because the ticket is already being tracked by the session.
 
-    db.commit()
-    db.refresh(ticket)
+    try:
+        db.commit()
+        db.refresh(ticket)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception(
+            "Failed to update ticket_id=%s.",
+            ticket_id,
+        )
+        raise DatabaseWriteError(
+            "The ticket could not be updated."
+        ) from exc
 
     return ticket

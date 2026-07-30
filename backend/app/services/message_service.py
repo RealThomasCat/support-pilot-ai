@@ -1,10 +1,16 @@
 from datetime import datetime, timezone
+import logging
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.models.conversation import Conversation
 from app.db.models.message import Message, MessageRole
+from app.services.errors import DatabaseWriteError
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_message(
@@ -22,9 +28,20 @@ def create_message(
 
     conversation.updated_at = datetime.now(timezone.utc)
 
-    db.add(message)
-    db.commit()
-    db.refresh(message)
+    try:
+        db.add(message)
+        db.commit()
+        db.refresh(message)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception(
+            "Failed to create %s message for conversation_id=%s.",
+            role.value,
+            conversation.id,
+        )
+        raise DatabaseWriteError(
+            "The message could not be saved."
+        ) from exc
 
     return message
 

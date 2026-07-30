@@ -1,7 +1,14 @@
+import logging
+
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.models.conversation import Conversation
+from app.services.errors import DatabaseWriteError
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_conversation(
@@ -11,9 +18,16 @@ def create_conversation(
 ) -> Conversation:
     conversation = Conversation(title=title)
 
-    db.add(conversation)
-    db.commit()
-    db.refresh(conversation)
+    try:
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Failed to create conversation.")
+        raise DatabaseWriteError(
+            "The conversation could not be saved."
+        ) from exc
 
     return conversation
 
