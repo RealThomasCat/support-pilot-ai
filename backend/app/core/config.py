@@ -11,6 +11,7 @@ ENV_FILE = BASE_DIR / ".env"
 class Settings(BaseSettings):
     app_name: str = "SupportPilot AI"
     environment: str = "local"
+    log_level: str = "INFO"
 
     database_url: str = (
         "postgresql+psycopg://supportpilot:supportpilot@localhost:5433/supportpilot"

@@ -2,9 +2,12 @@ from fastapi import FastAPI
 
 from app.api.routes import health, tickets, conversations, messages, tool_calls
 from app.core.config import settings
+from app.core.logging_config import configure_logging
 
 
 def create_app() -> FastAPI:
+    configure_logging()
+
     app = FastAPI(title=settings.app_name)
     app.include_router(health.router)
     app.include_router(tickets.router)
